@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: ${DATABASE_URL:jdbc:h2:mem:bookflow;MODE=PostgreSQL;DATABASE_TO_UPPER=false}
+    url: ${DATABASE_URL:jdbc:h2:mem:candyshare;MODE=PostgreSQL;DATABASE_TO_UPPER=false}
     username: ${DATABASE_USERNAME:sa}
     password: ${DATABASE_PASSWORD:}
   jpa:
@@ -14,3 +14,10 @@ spring:
 
 server:
   port: ${PORT:8080}
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        http-only: true
+        same-site: lax

@@ -1,4 +1,4 @@
-package com.bookflow;
+package com.candyshare;
 
 import java.time.Instant;
 import java.util.List;

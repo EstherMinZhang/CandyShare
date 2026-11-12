@@ -1,4 +1,4 @@
-package com.bookflow;
+package com.candyshare;
 
 import org.springframework.http.HttpStatus;
 

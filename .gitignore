@@ -33,4 +33,4 @@ toSelf.txt
 toSelf.docx
 ~$*.docx
 
-/docs/code-comments-guide.md
+.github/modernize/

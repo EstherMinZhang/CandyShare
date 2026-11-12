@@ -1,4 +1,4 @@
-name: BookFlow CI/CD
+name: Halloween CandyShare CI/CD
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: bookflow-${{ github.ref }}
+  group: candyshare-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -63,7 +63,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: backend-jar
-          path: backend/target/bookflow-backend-*.jar
+          path: backend/target/candyshare-backend-*.jar
           if-no-files-found: error
           retention-days: 7
 
@@ -133,7 +133,7 @@ jobs:
           API_URL: ${{ vars.VITE_API_BASE_URL }}
         run: |
           curl --fail --silent --show-error --retry 18 --retry-all-errors \
-            --retry-delay 10 --max-time 20 "${API_URL}/api/books"
+            --retry-delay 10 --max-time 20 "${API_URL}/api/listings"
 
   deploy-frontend:
     name: Deploy Azure Static Web Apps

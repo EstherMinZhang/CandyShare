@@ -1,142 +1,128 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
-
-export type Book = {
-  id: number;
-  title: string;
-  author: string;
-  isbn: string;
-  price: number;
-  stockQuantity: number;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type BookPayload = {
-  title: string;
-  author: string;
-  isbn: string;
-  price: number;
-  stockQuantity: number;
-};
-
-export type Customer = {
+const BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+export type User = {
   id: number;
   name: string;
   email: string;
-  phone?: string;
-  createdAt: string;
-  updatedAt: string;
+  contactDetails: string;
 };
-
-export type CustomerPayload = {
+export type Registration = {
   name: string;
   email: string;
-  phone: string;
+  password: string;
 };
-
-export type CheckoutItemPayload = {
-  bookId: number;
-  quantity: number;
+export type ListingInput = {
+  notes: string;
+  region: string;
 };
-
-export type Order = {
+export type Listing = ListingInput & {
   id: number;
-  customerId: number;
-  customerName: string;
-  totalAmount: number;
+  ownerId: number;
+  ownerName: string;
   createdAt: string;
-  items: OrderItem[];
+  status: "AVAILABLE" | "RESERVED" | "COMPLETED" | "WITHDRAWN";
+  handoff: null | {
+    ownerContact: string;
+    claimantName: string | null;
+    claimantContact: string | null;
+    instructions: string;
+    claimId: number | null;
+  };
 };
-
-export type OrderItem = {
-  bookId: number;
-  title: string;
-  quantity: number;
-  unitPrice: number;
-  lineTotal: number;
+export type Claim = {
+  id: number;
+  status: "RESERVED" | "CANCELLED" | "COMPLETED";
+  createdAt: string;
+  resolvedAt: string | null;
+  listing: Listing;
 };
-
-type ApiError = {
-  message?: string;
-  details?: string[];
-};
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers
-    },
-    ...init
-  });
-
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+async function read<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    let message = `Request failed with status ${response.status}`;
+    let message = `Request failed (${response.status}). Please try again.`;
     try {
-      const error = (await response.json()) as ApiError;
-      const details = error.details?.join(" ");
-      message = [error.message, details].filter(Boolean).join(" ");
+      const body = await response.json();
+      message =
+        [body.message, ...(body.details ?? [])].filter(Boolean).join(" ") ||
+        message;
     } catch {
+      /* Keep the default message for proxy errors. */
     }
-    throw new Error(message);
+    throw new ApiError(response.status, message);
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
   return response.json() as Promise<T>;
 }
-
-export const api = {
-  getBooks: () => request<Book[]>("/api/books"),
-  createBook: (payload: BookPayload) =>
-    request<Book>("/api/books", { method: "POST", body: JSON.stringify(payload) }),
-  updateBook: (id: number, payload: BookPayload) =>
-    request<Book>(`/api/books/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
-  deleteBook: (id: number) => request<void>(`/api/books/${id}`, { method: "DELETE" }),
-
-  getCustomers: () => request<Customer[]>("/api/customers"),
-  createCustomer: (payload: CustomerPayload) =>
-    request<Customer>("/api/customers", { method: "POST", body: JSON.stringify(payload) }),
-  updateCustomer: (id: number, payload: CustomerPayload) =>
-    request<Customer>(`/api/customers/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
-  deleteCustomer: (id: number) => request<void>(`/api/customers/${id}`, { method: "DELETE" }),
-
-  getOrders: async () => (await request<RawOrder[]>("/api/orders")).map(toOrder),
-  checkout: (customerId: number, items: CheckoutItemPayload[]) =>
-    request<RawOrder>("/api/orders/checkout", {
-      method: "POST",
-      body: JSON.stringify({ customerId, items })
-    }).then(toOrder)
-};
-
-type RawOrder = {
-  id: number;
-  customer: Customer;
-  totalAmount: number;
-  createdAt: string;
-  items: Array<{
-    book: Book;
-    quantity: number;
-    unitPrice: number;
-    lineTotal: number;
-  }>;
-};
-
-function toOrder(order: RawOrder): Order {
-  return {
-    id: order.id,
-    customerId: order.customer.id,
-    customerName: order.customer.name,
-    totalAmount: order.totalAmount,
-    createdAt: order.createdAt,
-    items: order.items.map((item) => ({
-      bookId: item.book.id,
-      title: item.book.title,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      lineTotal: item.lineTotal
-    }))
-  };
+async function request<T>(
+  path: string,
+  method = "GET",
+  body?: unknown,
+  form = false,
+): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (method !== "GET") {
+    const csrf = await read<{ headerName: string; token: string }>(
+      await fetch(`${BASE}/api/auth/csrf`, {
+        credentials: "include",
+        cache: "no-store",
+      }),
+    );
+    headers[csrf.headerName] = csrf.token;
+  }
+  if (body !== undefined)
+    headers["Content-Type"] = form
+      ? "application/x-www-form-urlencoded"
+      : "application/json";
+  return read<T>(
+    await fetch(`${BASE}${path}`, {
+      method,
+      credentials: "include",
+      cache: "no-store",
+      headers,
+      body:
+        body === undefined
+          ? undefined
+          : form
+            ? String(body)
+            : JSON.stringify(body),
+    }),
+  );
 }
+export const api = {
+  me: () => request<User>("/api/auth/me"),
+  register: (input: Registration) =>
+    request<User>("/api/auth/register", "POST", {
+      ...input,
+      contactDetails: input.email.trim(),
+    }),
+  login: (email: string, password: string) =>
+    request<User>(
+      "/api/auth/login",
+      "POST",
+      new URLSearchParams({ email, password }),
+      true,
+    ),
+  logout: () => request("/api/auth/logout", "POST"),
+  listings: (query: string, region: string) =>
+    request<Listing[]>(
+      `/api/listings?${new URLSearchParams({ query, region })}`,
+    ),
+  detail: (id: number) => request<Listing>(`/api/listings/${id}`),
+  myListings: () => request<Listing[]>("/api/me/listings"),
+  myClaims: () => request<Claim[]>("/api/me/claims"),
+  create: (input: ListingInput) =>
+    request<Listing>("/api/listings", "POST", input),
+  update: (id: number, input: ListingInput) =>
+    request<Listing>(`/api/listings/${id}`, "PUT", input),
+  withdraw: (id: number) =>
+    request<Listing>(`/api/listings/${id}/withdraw`, "POST"),
+  reserve: (id: number) => request<Claim>(`/api/listings/${id}/claims`, "POST"),
+  cancel: (id: number) => request<Claim>(`/api/claims/${id}/cancel`, "POST"),
+  complete: (id: number) =>
+    request<Listing>(`/api/listings/${id}/complete`, "POST"),
+};
